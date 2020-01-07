@@ -1,6 +1,7 @@
 extern crate sdl2;
 
 use sdl2::event::Event;
+use sdl2::pixels::Color;
 
 use std::io;
 use std::io::prelude::*;
@@ -62,7 +63,7 @@ impl Chip8_CPU {
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
 
-        let window = video_subsystem.window("Chip_8 Emulator", 64, 32).position_centered().build().unwrap();
+        let window = video_subsystem.window("Chip_8 Emulator", 64*5, 32*5).position_centered().build().unwrap();
         Chip8_CPU {
             memory: [0; 4096],
             v: [0; 16],
@@ -108,6 +109,7 @@ impl Chip8_CPU {
 
     pub fn cycle(&mut self) {
         let opcode: u16 = (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16;
+        //println!("{:#x?}", opcode);
 
         match opcode & 0xF000 {
             0x0000 => {
@@ -180,16 +182,19 @@ impl Chip8_CPU {
     }
 
     pub fn draw_graphics(&mut self) {
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
         self.canvas.clear();
-        self.canvas.present();
+        self.canvas.set_draw_color(Color::RGB(0, 255, 0));
         for j in 0..32 {
             for i in 0..64 {
                 let pixel_location = (i + (j * 64)) as usize;
                 let pixel = self.gfx[pixel_location];
-                print!("{}", pixel);
+                if pixel == 1 {
+                    self.canvas.draw_point(sdl2::rect::Point::new(i, j)).unwrap();
+                }
             }
-            println!("");
         }
+        self.canvas.present();
         self.draw_flag = false;
     }
 
@@ -368,8 +373,8 @@ impl Chip8_CPU {
     }
 
     fn i_drw_dxyn(&mut self, opcode: u16) {
-        let x: u16 = self.v[((opcode & 0x0F00) >> 8) as usize] as u16 - 1;
-        let y: u16 = self.v[((opcode & 0x00F0) >> 4) as usize] as u16 - 1;
+        let x: u16 = self.v[((opcode & 0x0F00) >> 8) as usize] as u16;
+        let y: u16 = self.v[((opcode & 0x00F0) >> 4) as usize] as u16;
         let n: u16 = opcode & 0x000F;
 
         println!("DRAWING AT x: {}, y: {}", x, y);
@@ -384,7 +389,6 @@ impl Chip8_CPU {
                         self.v[15] = 1;
                     }
                     self.gfx[pixel_location] ^= 1;
-                    println!("PIXEL: {}", self.gfx[pixel_location]);
                 }
             }
         }
@@ -430,7 +434,9 @@ impl Chip8_CPU {
     }
 
     fn i_ld_fx29(&mut self, opcode: u16) {
-        
+        let x: u16 = (opcode & 0x0F00) >> 8;
+        self.i = 5 * self.v[x as usize] as u16;
+        self.pc += 2;
     }
 
     fn i_ld_fx33(&mut self, opcode: u16) {
