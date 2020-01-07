@@ -4,13 +4,14 @@ use sdl2::event::Event;
 use sdl2::keyboard::Scancode;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
+use sdl2::Sdl;
 
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 use rand::prelude::*;
-
-type Opcode = u16;
+use std::sync::Mutex;
+use std::sync::Arc;
 
 static FONTS: [u8; 80] =
 [ 
@@ -53,12 +54,12 @@ pub struct Chip8_CPU {
     // 16 levels of stack for subroutines
     stack: Vec<u16>,
     // Current state of the key pressed for the HEX based keypad
-    key: [u8; 16],
+    pub keys: [bool; 16],
+    event_pump: sdl2::EventPump,
     // Current opcode
     opcode: u16,
     pub draw_flag: bool,
     canvas: sdl2::render::WindowCanvas,
-    event_pump: sdl2::EventPump,
 }
 
 impl Chip8_CPU {
@@ -76,11 +77,11 @@ impl Chip8_CPU {
             dt: 0,
             st: 0,
             stack: Vec::with_capacity(16),
-            key: [0; 16],
+            keys: [false; 16],
+            event_pump: sdl_context.event_pump().unwrap(),
             opcode: 0,
             draw_flag: true,
             canvas: window.into_canvas().build().unwrap(),
-            event_pump: sdl_context.event_pump().unwrap(),
         }
     }
 
@@ -89,6 +90,7 @@ impl Chip8_CPU {
         self.opcode = 0;
         self.i = 0;
         self.stack = Vec::with_capacity(16);
+        self.keys = [false; 16];
         self.draw_flag = true;
         self.canvas.clear();
         self.canvas.present();
@@ -102,18 +104,18 @@ impl Chip8_CPU {
         let mut file = File::open(filename).unwrap();
     
         let n = file.read(&mut self.memory[0x200..]).unwrap();
-        println!("{}", n);
+        //println!("{}", n);
         let mut i = 0x200;
         while i < n+0x200 {
             let opcode: u16 = (self.memory[i] as u16) << 8 | self.memory[i+1] as u16;
-            print!("{:#x?}, ", opcode);
+            //print!("{:#x?}, ", opcode);
             i += 2;
         }
     }
 
     pub fn cycle(&mut self) {
         let opcode: u16 = (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16;
-        println!("{:#x?}", opcode);
+        //println!("{:#x?}", opcode);
 
         match opcode & 0xF000 {
             0x0000 => {
@@ -184,6 +186,56 @@ impl Chip8_CPU {
             }
             self.st -= 1;
             std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    pub fn setKeys(&mut self) {
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { keycode, .. } => {
+                    match keycode {
+                        Some(Keycode::Num0) => self.keys[0x0] = true,
+                        Some(Keycode::Num1) => self.keys[0x1] = true,
+                        Some(Keycode::Num2) => self.keys[0x2] = true,
+                        Some(Keycode::Num3) => self.keys[0x3] = true,
+                        Some(Keycode::Num4) => self.keys[0x4] = true,
+                        Some(Keycode::Num5) => self.keys[0x5] = true,
+                        Some(Keycode::Num6) => self.keys[0x6] = true,
+                        Some(Keycode::Num7) => self.keys[0x7] = true,
+                        Some(Keycode::Num8) => self.keys[0x8] = true,
+                        Some(Keycode::Num9) => self.keys[0x9] = true,
+                        Some(Keycode::A) => self.keys[0xa] = true,
+                        Some(Keycode::B) => self.keys[0xb] = true,
+                        Some(Keycode::C) => self.keys[0xc] = true,
+                        Some(Keycode::D) => self.keys[0xd] = true,
+                        Some(Keycode::E) => self.keys[0xe] = true,
+                        Some(Keycode::F) => self.keys[0xf] = true,
+                        _ => {},
+                    }
+                },
+                Event::KeyUp { keycode, .. } => {
+                    match keycode {
+                        Some(Keycode::Num0) => self.keys[0x0] = false,
+                        Some(Keycode::Num1) => self.keys[0x1] = false,
+                        Some(Keycode::Num2) => self.keys[0x2] = false,
+                        Some(Keycode::Num3) => self.keys[0x3] = false,
+                        Some(Keycode::Num4) => self.keys[0x4] = false,
+                        Some(Keycode::Num5) => self.keys[0x5] = false,
+                        Some(Keycode::Num6) => self.keys[0x6] = false,
+                        Some(Keycode::Num7) => self.keys[0x7] = false,
+                        Some(Keycode::Num8) => self.keys[0x8] = false,
+                        Some(Keycode::Num9) => self.keys[0x9] = false,
+                        Some(Keycode::A) => self.keys[0xa] = false,
+                        Some(Keycode::B) => self.keys[0xb] = false,
+                        Some(Keycode::C) => self.keys[0xc] = false,
+                        Some(Keycode::D) => self.keys[0xd] = false,
+                        Some(Keycode::E) => self.keys[0xe] = false,
+                        Some(Keycode::F) => self.keys[0xf] = false,
+                        _ => {},
+                    }
+                },
+                _ => {},
+            }
         }
     }
 
@@ -411,42 +463,8 @@ impl Chip8_CPU {
     fn i_skp_ex9e(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let vx: u8 = self.v[x as usize];
-        let key_desired = match vx {
-            0x0 => Keycode::Num0,
-            0x1 => Keycode::Num1,
-            0x2 => Keycode::Num2,
-            0x3 => Keycode::Num3,
-            0x4 => Keycode::Num4,
-            0x5 => Keycode::Num5,
-            0x6 => Keycode::Num6,
-            0x7 => Keycode::Num7,
-            0x8 => Keycode::Num8,
-            0x9 => Keycode::Num9,
-            0xa => Keycode::A,
-            0xb => Keycode::B,
-            0xc => Keycode::C,
-            0xd => Keycode::D,
-            0xe => Keycode::E,
-            0xf => Keycode::F,
-            _ => Keycode::Escape,
-        };
 
-        let mut is_desired_key_pressed: bool = false;
-
-        for event in self.event_pump.poll_iter() {
-            match event {
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(key_pressed) = keycode {
-                        if key_pressed == key_desired {
-                            is_desired_key_pressed = true;
-                        }
-                    }
-                },
-                _ => {},
-            }
-        }
-
-        if is_desired_key_pressed {
+        if self.keys[vx as usize] {
             self.pc += 2;
         }
         self.pc += 2;
@@ -455,42 +473,8 @@ impl Chip8_CPU {
     fn i_sknp_exa1(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let vx: u8 = self.v[x as usize];
-        let key_desired = match vx {
-            0x0 => Keycode::Num0,
-            0x1 => Keycode::Num1,
-            0x2 => Keycode::Num2,
-            0x3 => Keycode::Num3,
-            0x4 => Keycode::Num4,
-            0x5 => Keycode::Num5,
-            0x6 => Keycode::Num6,
-            0x7 => Keycode::Num7,
-            0x8 => Keycode::Num8,
-            0x9 => Keycode::Num9,
-            0xa => Keycode::A,
-            0xb => Keycode::B,
-            0xc => Keycode::C,
-            0xd => Keycode::D,
-            0xe => Keycode::E,
-            0xf => Keycode::F,
-            _ => Keycode::Escape,
-        };
 
-        let mut is_desired_key_pressed: bool = false;
-
-        for event in self.event_pump.poll_iter() {
-            match event {
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(key_pressed) = keycode {
-                        if key_pressed == key_desired {
-                            is_desired_key_pressed = true;
-                        }
-                    }
-                },
-                _ => {},
-            }
-        }
-
-        if !is_desired_key_pressed {
+        if !self.keys[vx as usize] {
             self.pc += 2;
         }
         self.pc += 2;
@@ -505,33 +489,12 @@ impl Chip8_CPU {
     fn i_ld_fx0a(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
 
-        let mut key_pressed: u16 = 16;
+        let mut key_pressed: usize = 16;
 
         while key_pressed > 15 {
-            for event in self.event_pump.poll_iter() {
-                match event {
-                    Event::KeyDown { keycode, .. } => {
-                        match keycode {
-                            Some(Keycode::Num0) => key_pressed = 0x0,
-                            Some(Keycode::Num1) => key_pressed = 0x1,
-                            Some(Keycode::Num2) => key_pressed = 0x2,
-                            Some(Keycode::Num3) => key_pressed = 0x3,
-                            Some(Keycode::Num4) => key_pressed = 0x4,
-                            Some(Keycode::Num5) => key_pressed = 0x5,
-                            Some(Keycode::Num6) => key_pressed = 0x6,
-                            Some(Keycode::Num7) => key_pressed = 0x7,
-                            Some(Keycode::Num8) => key_pressed = 0x8,
-                            Some(Keycode::Num9) => key_pressed = 0x9,
-                            Some(Keycode::A) => key_pressed = 0xa,
-                            Some(Keycode::B) => key_pressed = 0xb,
-                            Some(Keycode::C) => key_pressed = 0xc,
-                            Some(Keycode::D) => key_pressed = 0xd,
-                            Some(Keycode::E) => key_pressed = 0xe,
-                            Some(Keycode::F) => key_pressed = 0xf,
-                            _ => {},
-                        }
-                    },
-                    _ => {},
+            for (index, key) in self.keys.iter().enumerate() {
+                if *key {
+                    key_pressed = index;
                 }
             }
         }

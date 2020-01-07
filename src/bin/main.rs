@@ -1,4 +1,9 @@
 use chip8_emulator::Chip8_CPU;
+use std::sync::Mutex;
+use std::sync::Arc;
+use sdl2::keyboard::Keycode;
+use sdl2::event::Event;
+
 
 fn main() {
     let mut chip8 = Chip8_CPU::new();
@@ -9,12 +14,12 @@ fn main() {
         chip8.cycle();
 
         if chip8.draw_flag {
-            println!("----------------------------------------");
+            //println!("----------------------------------------");
             chip8.draw_graphics();
         }
 
-        //chip8.setKeys
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        chip8.setKeys();
+        std::thread::sleep(std::time::Duration::from_millis(2));
     }
 
 }
