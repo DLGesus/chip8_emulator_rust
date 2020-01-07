@@ -1,6 +1,8 @@
 extern crate sdl2;
 
 use sdl2::event::Event;
+use sdl2::keyboard::Scancode;
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 
 use std::io;
@@ -56,6 +58,7 @@ pub struct Chip8_CPU {
     opcode: u16,
     pub draw_flag: bool,
     canvas: sdl2::render::WindowCanvas,
+    event_pump: sdl2::EventPump,
 }
 
 impl Chip8_CPU {
@@ -77,6 +80,7 @@ impl Chip8_CPU {
             opcode: 0,
             draw_flag: true,
             canvas: window.into_canvas().build().unwrap(),
+            event_pump: sdl_context.event_pump().unwrap(),
         }
     }
 
@@ -169,7 +173,7 @@ impl Chip8_CPU {
             _ => {},
         }
 
-        if (self.dt > 0) {
+        if self.dt > 0 {
             self.dt -= 1;
         }
 
@@ -211,6 +215,7 @@ impl Chip8_CPU {
 
     fn i_ret_00ee(&mut self, opcode: u16) {
         self.pc = self.stack.pop().unwrap();
+        self.pc += 2;
     }
 
     fn i_jp_1nnn(&mut self, opcode: u16) {
@@ -398,11 +403,59 @@ impl Chip8_CPU {
     }
 
     fn i_skp_ex9e(&mut self, opcode: u16) {
-        
+        let x: u16 = (opcode & 0x0F00) >> 8;
+        let vx: u8 = self.v[x as usize];
+        let scancode = match vx {
+            0x0 => Scancode::Num0,
+            0x1 => Scancode::Num1,
+            0x2 => Scancode::Num2,
+            0x3 => Scancode::Num3,
+            0x4 => Scancode::Num4,
+            0x5 => Scancode::Num5,
+            0x6 => Scancode::Num6,
+            0x7 => Scancode::Num7,
+            0x8 => Scancode::Num8,
+            0x9 => Scancode::Num9,
+            0xa => Scancode::A,
+            0xb => Scancode::B,
+            0xc => Scancode::C,
+            0xd => Scancode::D,
+            0xe => Scancode::E,
+            0xf => Scancode::F,
+            _ => Scancode::Escape,
+        };
+        if self.event_pump.keyboard_state().is_scancode_pressed(scancode) {
+            self.pc += 2;
+        }
+        self.pc += 2;
     }
 
     fn i_sknp_exa1(&mut self, opcode: u16) {
-        
+        let x: u16 = (opcode & 0x0F00) >> 8;
+        let vx: u8 = self.v[x as usize];
+        let scancode = match vx {
+            0x0 => Scancode::Num0,
+            0x1 => Scancode::Num1,
+            0x2 => Scancode::Num2,
+            0x3 => Scancode::Num3,
+            0x4 => Scancode::Num4,
+            0x5 => Scancode::Num5,
+            0x6 => Scancode::Num6,
+            0x7 => Scancode::Num7,
+            0x8 => Scancode::Num8,
+            0x9 => Scancode::Num9,
+            0xa => Scancode::A,
+            0xb => Scancode::B,
+            0xc => Scancode::C,
+            0xd => Scancode::D,
+            0xe => Scancode::E,
+            0xf => Scancode::F,
+            _ => Scancode::Escape,
+        };
+        if !self.event_pump.keyboard_state().is_scancode_pressed(scancode) {
+            self.pc += 2;
+        }
+        self.pc += 2;
     }
 
     fn i_ld_fx07(&mut self, opcode: u16) {
@@ -412,7 +465,41 @@ impl Chip8_CPU {
     }
 
     fn i_ld_fx0a(&mut self, opcode: u16) {
-        
+        let x: u16 = (opcode & 0x0F00) >> 8;
+
+        let mut key_pressed: u16 = 16;
+
+        while key_pressed > 15 {
+            for event in self.event_pump.poll_iter() {
+                match event {
+                    Event::KeyDown { keycode, .. } => {
+                        match keycode {
+                            Some(Keycode::Num0) => key_pressed = 0x0,
+                            Some(Keycode::Num1) => key_pressed = 0x1,
+                            Some(Keycode::Num2) => key_pressed = 0x2,
+                            Some(Keycode::Num3) => key_pressed = 0x3,
+                            Some(Keycode::Num4) => key_pressed = 0x4,
+                            Some(Keycode::Num5) => key_pressed = 0x5,
+                            Some(Keycode::Num6) => key_pressed = 0x6,
+                            Some(Keycode::Num7) => key_pressed = 0x7,
+                            Some(Keycode::Num8) => key_pressed = 0x8,
+                            Some(Keycode::Num9) => key_pressed = 0x9,
+                            Some(Keycode::A) => key_pressed = 0xa,
+                            Some(Keycode::B) => key_pressed = 0xb,
+                            Some(Keycode::C) => key_pressed = 0xc,
+                            Some(Keycode::D) => key_pressed = 0xd,
+                            Some(Keycode::E) => key_pressed = 0xe,
+                            Some(Keycode::F) => key_pressed = 0xf,
+                            _ => {},
+                        }
+                    },
+                    _ => {},
+                }
+            }
+        }
+
+        self.v[x as usize] = key_pressed as u8;
+        self.pc += 2;
     }
 
     fn i_ld_fx15(&mut self, opcode: u16) {
