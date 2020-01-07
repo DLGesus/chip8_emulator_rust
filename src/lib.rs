@@ -180,7 +180,8 @@ impl Chip8CPU {
         }
     }
 
-    pub fn set_keys(&mut self) {
+    pub fn set_keys(&mut self) -> bool{
+        let mut exit_clicked = false;
         for event in self.event_pump.poll_iter() {
             match event {
                 Event::KeyDown { keycode, .. } => {
@@ -225,9 +226,11 @@ impl Chip8CPU {
                         _ => {},
                     }
                 },
+                Event::Quit {..} => exit_clicked = true,
                 _ => {},
             }
         }
+        exit_clicked
     }
 
     pub fn draw_graphics(&mut self) {
