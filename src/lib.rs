@@ -54,10 +54,15 @@ pub struct Chip8_CPU {
     // Current opcode
     opcode: u16,
     pub draw_flag: bool,
+    canvas: sdl2::render::WindowCanvas,
 }
 
 impl Chip8_CPU {
     pub fn new() -> Chip8_CPU{
+        let sdl_context = sdl2::init().unwrap();
+        let video_subsystem = sdl_context.video().unwrap();
+
+        let window = video_subsystem.window("Chip_8 Emulator", 64, 32).position_centered().build().unwrap();
         Chip8_CPU {
             memory: [0; 4096],
             v: [0; 16],
@@ -70,6 +75,7 @@ impl Chip8_CPU {
             key: [0; 16],
             opcode: 0,
             draw_flag: true,
+            canvas: window.into_canvas().build().unwrap(),
         }
     }
 
@@ -79,6 +85,8 @@ impl Chip8_CPU {
         self.i = 0;
         self.stack = Vec::with_capacity(16);
         self.draw_flag = true;
+        self.canvas.clear();
+        self.canvas.present();
 
         for i in 0..80 {
             self.memory[i] = FONTS[i];
@@ -172,6 +180,8 @@ impl Chip8_CPU {
     }
 
     pub fn draw_graphics(&mut self) {
+        self.canvas.clear();
+        self.canvas.present();
         for j in 0..32 {
             for i in 0..64 {
                 let pixel_location = (i + (j * 64)) as usize;
