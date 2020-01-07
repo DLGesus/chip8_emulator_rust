@@ -263,7 +263,7 @@ impl Chip8CPU {
             SquareWave {
                 phase_inc: 440.0 / spec.freq as f32,
                 phase: 0.0,
-                volume: 0.25
+                volume: 0.02
             }
         }).unwrap();
 
@@ -271,7 +271,7 @@ impl Chip8CPU {
         device.resume();
 
         // Play for 2 seconds
-        std::thread::sleep(Duration::from_millis(2000));
+        std::thread::sleep(Duration::from_millis(100));
     }
 
     fn i_sys_0nnn(&mut self) {
