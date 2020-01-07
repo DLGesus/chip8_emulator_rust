@@ -1,17 +1,13 @@
 extern crate sdl2;
 
 use sdl2::event::Event;
-use sdl2::keyboard::Scancode;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
-use sdl2::Sdl;
+use sdl2::audio::{AudioCallback, AudioSpecDesired};
+use std::time::Duration;
 
-use std::io;
 use std::io::prelude::*;
 use std::fs::File;
-use rand::prelude::*;
-use std::sync::Mutex;
-use std::sync::Arc;
 
 static FONTS: [u8; 80] =
 [ 
@@ -33,7 +29,7 @@ static FONTS: [u8; 80] =
   0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 ];
 
-pub struct Chip8_CPU {
+pub struct Chip8CPU {
     // 4k emulated memory
     // 0x000-0x1FF = Chip 8 Interpreter
     // 0x050-0x0A0 = 4x5 pixel font set
@@ -60,15 +56,16 @@ pub struct Chip8_CPU {
     opcode: u16,
     pub draw_flag: bool,
     canvas: sdl2::render::WindowCanvas,
+    audio_subsystem: sdl2::AudioSubsystem,
 }
 
-impl Chip8_CPU {
-    pub fn new() -> Chip8_CPU{
+impl Chip8CPU {
+    pub fn new() -> Chip8CPU{
         let sdl_context = sdl2::init().unwrap();
         let video_subsystem = sdl_context.video().unwrap();
 
         let window = video_subsystem.window("Chip_8 Emulator", 64*5, 32*5).position_centered().build().unwrap();
-        Chip8_CPU {
+        Chip8CPU {
             memory: [0; 4096],
             v: [0; 16],
             i: 0,
@@ -82,6 +79,7 @@ impl Chip8_CPU {
             opcode: 0,
             draw_flag: true,
             canvas: window.into_canvas().build().unwrap(),
+            audio_subsystem: sdl_context.audio().unwrap(),
         }
     }
 
@@ -103,14 +101,7 @@ impl Chip8_CPU {
     pub fn load(&mut self, filename: &str) {
         let mut file = File::open(filename).unwrap();
     
-        let n = file.read(&mut self.memory[0x200..]).unwrap();
-        //println!("{}", n);
-        let mut i = 0x200;
-        while i < n+0x200 {
-            let opcode: u16 = (self.memory[i] as u16) << 8 | self.memory[i+1] as u16;
-            //print!("{:#x?}, ", opcode);
-            i += 2;
-        }
+        let _n = file.read(&mut self.memory[0x200..]).unwrap();
     }
 
     pub fn cycle(&mut self) {
@@ -120,9 +111,9 @@ impl Chip8_CPU {
         match opcode & 0xF000 {
             0x0000 => {
                 match opcode & 0x00FF {
-                    0xE0 => self.i_clr_00e0(opcode),
-                    0xEE => self.i_ret_00ee(opcode),
-                    0x0 | _ => self.i_sys_0nnn(opcode),
+                    0xE0 => self.i_clr_00e0(),
+                    0xEE => self.i_ret_00ee(),
+                    0x0 | _ => self.i_sys_0nnn(),
                 }
             },
             0x1000 => self.i_jp_1nnn(opcode),
@@ -182,14 +173,14 @@ impl Chip8_CPU {
 
         if self.st > 0 {
             if self.st == 1 {
-                println!("IM MISTER MEESEEKS LOOK AT ME!");
+                self.play_audio();
             }
             self.st -= 1;
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
-    pub fn setKeys(&mut self) {
+    pub fn set_keys(&mut self) {
         for event in self.event_pump.poll_iter() {
             match event {
                 Event::KeyDown { keycode, .. } => {
@@ -260,18 +251,41 @@ impl Chip8_CPU {
         self.draw_flag = false;
     }
 
-    fn i_sys_0nnn(&mut self, opcode: u16) {
+    fn play_audio(&mut self) {
+        let desired_spec = AudioSpecDesired {
+            freq: Some(44100),
+            channels: Some(1),  // mono
+            samples: None       // default sample size
+        };
+        
+        let device = self.audio_subsystem.open_playback(None, &desired_spec, |spec| {
+            // initialize the audio callback
+            SquareWave {
+                phase_inc: 440.0 / spec.freq as f32,
+                phase: 0.0,
+                volume: 0.25
+            }
+        }).unwrap();
+
+        // Start playback
+        device.resume();
+
+        // Play for 2 seconds
+        std::thread::sleep(Duration::from_millis(2000));
+    }
+
+    fn i_sys_0nnn(&mut self) {
         self.pc += 2;
         return;
     }
     
-    fn i_clr_00e0(&mut self, opcode: u16) {
+    fn i_clr_00e0(&mut self) {
         self.gfx = [0; 64*32];
         self.draw_flag = true;
         self.pc += 2;
     }
 
-    fn i_ret_00ee(&mut self, opcode: u16) {
+    fn i_ret_00ee(&mut self) {
         self.pc = self.stack.pop().unwrap();
         self.pc += 2;
     }
@@ -552,4 +566,26 @@ impl Chip8_CPU {
         self.pc += 2;
     }
      
+}
+
+struct SquareWave {
+    phase_inc: f32,
+    phase: f32,
+    volume: f32
+}
+
+impl AudioCallback for SquareWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        // Generate a square wave
+        for x in out.iter_mut() {
+            *x = if self.phase <= 0.5 {
+                self.volume
+            } else {
+                -self.volume
+            };
+            self.phase = (self.phase + self.phase_inc) % 1.0;
+        }
+    }
 }
