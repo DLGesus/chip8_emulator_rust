@@ -14,7 +14,7 @@ fn main() {
         }
 
         //chip8.setKeys
-
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 
 }

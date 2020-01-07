@@ -113,7 +113,7 @@ impl Chip8_CPU {
 
     pub fn cycle(&mut self) {
         let opcode: u16 = (self.memory[self.pc as usize] as u16) << 8 | self.memory[self.pc as usize + 1] as u16;
-        //println!("{:#x?}", opcode);
+        println!("{:#x?}", opcode);
 
         match opcode & 0xF000 {
             0x0000 => {
@@ -175,6 +175,7 @@ impl Chip8_CPU {
 
         if self.dt > 0 {
             self.dt -= 1;
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
 
         if self.st > 0 {
@@ -182,6 +183,7 @@ impl Chip8_CPU {
                 println!("IM MISTER MEESEEKS LOOK AT ME!");
             }
             self.st -= 1;
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
@@ -194,7 +196,11 @@ impl Chip8_CPU {
                 let pixel_location = (i + (j * 64)) as usize;
                 let pixel = self.gfx[pixel_location];
                 if pixel == 1 {
-                    self.canvas.draw_point(sdl2::rect::Point::new(i, j)).unwrap();
+                    for x in 0..5 {
+                        for y in 0..5 {
+                            self.canvas.draw_point(sdl2::rect::Point::new(x + (5*i), y + (5*j))).unwrap();
+                        }
+                    }
                 }
             }
         }
@@ -266,7 +272,7 @@ impl Chip8_CPU {
     fn i_add_7xkk(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let kk: u8 = (opcode & 0x00FF) as u8;
-        self.v[x as usize] += kk;
+        self.v[x as usize] = self.v[x as usize].wrapping_add(kk);
         self.pc += 2;
     }
 
@@ -301,12 +307,12 @@ impl Chip8_CPU {
     fn i_add_8xy4(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let y: u16 = (opcode & 0x00F0) >> 4;
-        self.v[x as usize] += self.v[y as usize];
-        self.v[15] = match self.v[x as usize] > 255 {
+        let result: u16 = self.v[x as usize] as u16 + self.v[y as usize] as u16;
+        self.v[15] = match result > 255 {
             true => 1,
             false => 0,
         };
-        self.v[x as usize] &= 0x0F;
+        self.v[x as usize] = (result & 0xFF) as u8;
         self.pc += 2;
     }
 
@@ -317,7 +323,7 @@ impl Chip8_CPU {
             true => 1,
             false => 0,
         };
-        self.v[x as usize] -= self.v[y as usize];
+        self.v[x as usize] = self.v[x as usize].wrapping_sub(self.v[y as usize]);
         self.pc += 2;
     }
 
@@ -335,7 +341,7 @@ impl Chip8_CPU {
             true => 1,
             false => 0,
         };
-        self.v[x as usize] = self.v[y as usize] - self.v[x as usize];
+        self.v[x as usize] = self.v[y as usize].wrapping_sub(self.v[x as usize]);
         self.pc += 2;
     }
 
@@ -382,7 +388,7 @@ impl Chip8_CPU {
         let y: u16 = self.v[((opcode & 0x00F0) >> 4) as usize] as u16;
         let n: u16 = opcode & 0x000F;
 
-        println!("DRAWING AT x: {}, y: {}", x, y);
+        //println!("DRAWING AT x: {}, y: {}", x, y);
 
         self.v[15] = 0;
         for j in 0..n {
@@ -405,26 +411,42 @@ impl Chip8_CPU {
     fn i_skp_ex9e(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let vx: u8 = self.v[x as usize];
-        let scancode = match vx {
-            0x0 => Scancode::Num0,
-            0x1 => Scancode::Num1,
-            0x2 => Scancode::Num2,
-            0x3 => Scancode::Num3,
-            0x4 => Scancode::Num4,
-            0x5 => Scancode::Num5,
-            0x6 => Scancode::Num6,
-            0x7 => Scancode::Num7,
-            0x8 => Scancode::Num8,
-            0x9 => Scancode::Num9,
-            0xa => Scancode::A,
-            0xb => Scancode::B,
-            0xc => Scancode::C,
-            0xd => Scancode::D,
-            0xe => Scancode::E,
-            0xf => Scancode::F,
-            _ => Scancode::Escape,
+        let key_desired = match vx {
+            0x0 => Keycode::Num0,
+            0x1 => Keycode::Num1,
+            0x2 => Keycode::Num2,
+            0x3 => Keycode::Num3,
+            0x4 => Keycode::Num4,
+            0x5 => Keycode::Num5,
+            0x6 => Keycode::Num6,
+            0x7 => Keycode::Num7,
+            0x8 => Keycode::Num8,
+            0x9 => Keycode::Num9,
+            0xa => Keycode::A,
+            0xb => Keycode::B,
+            0xc => Keycode::C,
+            0xd => Keycode::D,
+            0xe => Keycode::E,
+            0xf => Keycode::F,
+            _ => Keycode::Escape,
         };
-        if self.event_pump.keyboard_state().is_scancode_pressed(scancode) {
+
+        let mut is_desired_key_pressed: bool = false;
+
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(key_pressed) = keycode {
+                        if key_pressed == key_desired {
+                            is_desired_key_pressed = true;
+                        }
+                    }
+                },
+                _ => {},
+            }
+        }
+
+        if is_desired_key_pressed {
             self.pc += 2;
         }
         self.pc += 2;
@@ -433,26 +455,42 @@ impl Chip8_CPU {
     fn i_sknp_exa1(&mut self, opcode: u16) {
         let x: u16 = (opcode & 0x0F00) >> 8;
         let vx: u8 = self.v[x as usize];
-        let scancode = match vx {
-            0x0 => Scancode::Num0,
-            0x1 => Scancode::Num1,
-            0x2 => Scancode::Num2,
-            0x3 => Scancode::Num3,
-            0x4 => Scancode::Num4,
-            0x5 => Scancode::Num5,
-            0x6 => Scancode::Num6,
-            0x7 => Scancode::Num7,
-            0x8 => Scancode::Num8,
-            0x9 => Scancode::Num9,
-            0xa => Scancode::A,
-            0xb => Scancode::B,
-            0xc => Scancode::C,
-            0xd => Scancode::D,
-            0xe => Scancode::E,
-            0xf => Scancode::F,
-            _ => Scancode::Escape,
+        let key_desired = match vx {
+            0x0 => Keycode::Num0,
+            0x1 => Keycode::Num1,
+            0x2 => Keycode::Num2,
+            0x3 => Keycode::Num3,
+            0x4 => Keycode::Num4,
+            0x5 => Keycode::Num5,
+            0x6 => Keycode::Num6,
+            0x7 => Keycode::Num7,
+            0x8 => Keycode::Num8,
+            0x9 => Keycode::Num9,
+            0xa => Keycode::A,
+            0xb => Keycode::B,
+            0xc => Keycode::C,
+            0xd => Keycode::D,
+            0xe => Keycode::E,
+            0xf => Keycode::F,
+            _ => Keycode::Escape,
         };
-        if !self.event_pump.keyboard_state().is_scancode_pressed(scancode) {
+
+        let mut is_desired_key_pressed: bool = false;
+
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(key_pressed) = keycode {
+                        if key_pressed == key_desired {
+                            is_desired_key_pressed = true;
+                        }
+                    }
+                },
+                _ => {},
+            }
+        }
+
+        if !is_desired_key_pressed {
             self.pc += 2;
         }
         self.pc += 2;
